@@ -5,7 +5,7 @@
 # http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
 # Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import numpy as np
 
 #----------------------------------------------------------------------------
@@ -13,7 +13,7 @@ import numpy as np
 
 def get_weight(shape, gain=np.sqrt(2)):
     fan_in = np.prod(shape[:-1]) # [kernel, kernel, fmaps_in, fmaps_out] or [in, out]
-    std = gain / np.sqrt(fan_in) # He init
+    std = gain / np.sqrt(fan_in.value) # He init
     w = tf.get_variable('weight', shape=shape, initializer=tf.initializers.random_normal(0, std))
     return w
 
@@ -29,7 +29,7 @@ def apply_bias(x):
 
 def conv2d_bias(x, fmaps, kernel, gain=np.sqrt(2)):
     assert kernel >= 1 and kernel % 2 == 1
-    w = get_weight([kernel, kernel, x.shape[1].value, fmaps], gain=gain)
+    w = get_weight([kernel, kernel, x.shape[1], fmaps], gain=gain)
     w = tf.cast(w, x.dtype)
     return apply_bias(tf.nn.conv2d(x, w, strides=[1,1,1,1], padding='SAME', data_format='NCHW'))
 
@@ -56,9 +56,8 @@ def conv(name, x, fmaps, gain):
     with tf.variable_scope(name):
         return conv2d_bias(x, fmaps, 3, gain)
 
-def autoencoder(x, width=256, height=256, **_kwargs):
-    x.set_shape([None, 3, height, width])
-
+def autoencoder(x, width=128, height=128, **_kwargs):
+    x.set_shape([None, 1, height, width])
     skips = [x]
 
     n = x
@@ -109,6 +108,6 @@ def autoencoder(x, width=256, height=256, **_kwargs):
     n = conv_lr('dec_conv1a', n, 64)
     n = conv_lr('dec_conv1b', n, 32)
 
-    n = conv('dec_conv1', n, 3, gain=1.0)
+    n = conv('dec_conv1', n, 1, gain=1.0)
 
     return n

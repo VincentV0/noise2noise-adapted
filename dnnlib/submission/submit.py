@@ -222,6 +222,7 @@ def _populate_run_dir(run_dir: str, submit_config: SubmitConfig) -> None:
 
     with open(os.path.join(run_dir, "submit_config.txt"), "w") as f:
         pprint.pprint(submit_config, stream=f, indent=4, width=200, compact=False)
+    print("Copying files completed.")
 
 
 def run_wrapper(submit_config: SubmitConfig) -> None:

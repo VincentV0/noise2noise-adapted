@@ -74,7 +74,7 @@ train_config = dnnlib.EasyDict(
     run_func_name="train.train",
     learning_rate=0.0003,
     ramp_down_perc=0.3,
-    noise=gaussian_noise_config,
+#    noise=gaussian_noise_config,
 #    noise=poisson_noise_config,
     noise2noise=True,
     train_tfrecords='datasets/imagenet_val_raw.tfrecords',
@@ -143,7 +143,14 @@ if __name__ == "__main__":
         if 'train_tfrecords' in args and args.train_tfrecords is not None:
             train_config.train_tfrecords = submit.get_path_from_template(args.train_tfrecords)
 
-        print (train_config)
+        submit_config.train_filenames = args.train_filenames
+        submit_config.val_filenames = args.val_filenames
+        submit_config.patchsize = args.patchsize
+        submit_config.minibatch_size = args.minibatch_size
+
+        print("TRAINING CONFIGURATION:")
+        print(train_config)
+        print()
         dnnlib.submission.submit.submit_run(submit_config, **train_config)
 
     def validate(args):
@@ -191,7 +198,12 @@ if __name__ == "__main__":
     parser_train.add_argument('--noise2noise', nargs='?', type=str2bool, const=True, default=True, help='Noise2noise (--noise2noise=true) or noise2clean (--noise2noise=false).  Default is noise2noise=true.')
     parser_train.add_argument('--noise', default='gaussian', help='Type of noise corruption (one of: gaussian, poisson)')
     parser_train.add_argument('--long-train', default=False, help='Train for a very long time (500k iterations or 500k*minibatch image)')
-    parser_train.add_argument('--train-tfrecords', help='Filename of the training set tfrecords file')
+    #parser_train.add_argument('--train-tfrecords', help='Filename of the training set tfrecords file')
+    parser_train.add_argument('--train-filenames', nargs='+' , default='', help='Filenames of the training set .mat file')
+    parser_train.add_argument('--val-filenames', nargs='+' , default='', help='Filenames of the validation set .mat file')
+    parser_train.add_argument('--patchsize' , default='128', help='Size of the patches')
+    parser_train.add_argument('--minibatch-size' , default='512', help='Size of the minibatch per iteration')
+
     parser_train.set_defaults(func=train)
 
     parser_validate = subparsers.add_parser('validate', help='Run a set of images through the network')

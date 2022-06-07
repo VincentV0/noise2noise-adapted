@@ -5,7 +5,7 @@
 # http://creativecommons.org/licenses/by-nc/4.0/ or send a letter to
 # Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
 
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 import numpy as np
 
 import dnnlib
@@ -19,6 +19,13 @@ import config
 from util import save_image, save_snapshot
 from validation import ValidationSet
 from dataset import create_dataset
+
+from code_orig.data_utils_patch import PatchedDataset
+from code_orig.data_utils import Dataset
+from code_orig.training import batch_generator
+
+tf.disable_v2_behavior()
+tf.disable_eager_execution()
 
 class AugmentGaussian:
     def __init__(self, validation_stddev, train_stddev_rng_range):
@@ -65,9 +72,14 @@ def train(
     validation_config: dict,
     train_tfrecords: str,
     noise2noise: bool):
+
     noise_augmenter = dnnlib.util.call_func_by_name(**noise)
-    validation_set = ValidationSet(submit_config)
-    validation_set.load(**validation_config)
+    train = PatchedDataset(submit_config.train_filenames, 'RF_train_single', 'RF_train_avg', (int(submit_config.patchsize),int(submit_config.patchsize)), normalize=True, flippedaxes=False) 
+    validation_set = Dataset(submit_config.val_filenames[0]  , 'RF_val_single'  , 'RF_val_avg'  , (int(submit_config.patchsize),int(submit_config.patchsize)), normalize=True, flippedaxes=False) 
+
+    #validation_set = PatchedDataset()
+    #validation_set = ValidationSet(submit_config)  # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+    #validation_set.load(**validation_config)       # <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
     # Create a run context (hides low level details, exposes simple API to manage the run)
     ctx = dnnlib.RunContext(submit_config, config)
@@ -75,8 +87,7 @@ def train(
     # Initialize TensorFlow graph and session using good default settings
     tfutil.init_tf(config.tf_config)
 
-    dataset_iter = create_dataset(train_tfrecords, minibatch_size, noise_augmenter.add_train_noise_tf)
-
+    #dataset_iter = create_dataset(train_tfrecords, minibatch_size, noise_augmenter.add_train_noise_tf)
     # Construct the network using the Network helper class and a function defined in config.net_config
     with tf.device("/gpu:0"):
         net = tflib.Network(**config.net_config)
@@ -87,11 +98,13 @@ def train(
     print('Building TensorFlow graph...')
     with tf.name_scope('Inputs'), tf.device("/cpu:0"):
         lrate_in        = tf.placeholder(tf.float32, name='lrate_in', shape=[])
-
-        noisy_input, noisy_target, clean_target = dataset_iter.get_next()
+        noisy_input, noisy_target, clean_target = train.patches, None, train.patches_ref
+        noisy_input = tf.convert_to_tensor(np.transpose(noisy_input, [0,3,1,2]))
+        clean_target = tf.convert_to_tensor(np.transpose(clean_target, [0,3,1,2]))
         noisy_input_split = tf.split(noisy_input, submit_config.num_gpus)
-        noisy_target_split = tf.split(noisy_target, submit_config.num_gpus)
+        #noisy_target_split = tf.split(noisy_target, submit_config.num_gpus)
         clean_target_split = tf.split(clean_target, submit_config.num_gpus)
+
 
     # Define the loss function using the Optimizer helper class, this will take care of multi GPU
     opt = tflib.Optimizer(learning_rate=lrate_in, **config.optimizer_config)
@@ -103,7 +116,8 @@ def train(
             denoised = net_gpu.get_output_for(noisy_input_split[gpu])
 
             if noise2noise:
-                meansq_error = tf.reduce_mean(tf.square(noisy_target_split[gpu] - denoised))
+                pass;
+                #meansq_error = tf.reduce_mean(tf.square(noisy_target_split[gpu] - denoised))
             else:
                 meansq_error = tf.reduce_mean(tf.square(clean_target_split[gpu] - denoised))
             # Create an autosummary that will average over all GPUs
@@ -135,11 +149,11 @@ def train(
             # Evaluate 'x' to draw a batch of inputs
             [source_mb, target_mb] = tfutil.run([noisy_input, clean_target])
             denoised = net.run(source_mb)
-            save_image(submit_config, denoised[0], "img_{0}_y_pred.png".format(i))
-            save_image(submit_config, target_mb[0], "img_{0}_y.png".format(i))
-            save_image(submit_config, source_mb[0], "img_{0}_x_aug.png".format(i))
+            #save_image(submit_config, denoised[0,0], "img_{0}_y_pred.png".format(i))
+            #save_image(submit_config, target_mb[0,0], "img_{0}_y.png".format(i))
+            #save_image(submit_config, source_mb[0,0], "img_{0}_x_aug.png".format(i))
 
-            validation_set.evaluate(net, i, noise_augmenter.add_validation_noise_np)
+            #validation_set.evaluate(net, i, noise_augmenter.add_validation_noise_np)
 
             print('iter %-10d time %-12s sec/eval %-7.1f sec/iter %-7.2f maintenance %-6.1f' % (
                 autosummary('Timing/iter', i),
@@ -147,7 +161,6 @@ def train(
                 autosummary('Timing/sec_per_eval', time_train),
                 autosummary('Timing/sec_per_iter', time_train / eval_interval),
                 autosummary('Timing/maintenance_sec', time_maintenance)))
-
             dnnlib.tflib.autosummary.save_summaries(summary_log, i)
             ctx.update(loss='run %d' % submit_config.run_id, cur_epoch=i, max_epoch=iteration_count)
             time_maintenance = ctx.get_last_update_interval() - time_train

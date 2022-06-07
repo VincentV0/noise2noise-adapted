@@ -10,7 +10,7 @@
 import types
 import inspect
 import numpy as np
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 from collections import OrderedDict
 from typing import List, Tuple, Union
@@ -123,6 +123,7 @@ class Network:
         self.scope = tf.get_default_graph().unique_name(self.name.replace("/", "_"), mark_as_used=False)
 
         # Build template graph.
+
         with tf.variable_scope(self.scope, reuse=tf.AUTO_REUSE):
             assert tf.get_variable_scope().name == self.scope
 
@@ -150,6 +151,7 @@ class Network:
         self.output_shapes = [tfutil.shape_to_list(t.shape) for t in self.output_templates]
         self.input_shape = self.input_shapes[0]
         self.output_shape = self.output_shapes[0]
+        print(self.input_shape, self.output_shape)
         self.output_names = [t.name.split("/")[-1].split(":")[0] for t in self.output_templates]
         self.vars = OrderedDict([(self.get_var_local_name(var), var) for var in tf.global_variables(self.scope + "/")])
         self.trainables = OrderedDict([(self.get_var_local_name(var), var) for var in tf.trainable_variables(self.scope + "/")])
